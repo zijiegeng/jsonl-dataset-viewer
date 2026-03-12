@@ -396,20 +396,26 @@
 
         // Render conversation
         function renderConversation(messages) {
-            console.log('[renderConversation] Total messages:', messages.length);
-            conversationContent.innerHTML = messages.map((msg, idx) => {
+            const results = [];
+            for (let idx = 0; idx < messages.length; idx++) {
+                const msg = messages[idx];
                 try {
                     const html = renderMessage(msg, idx);
-                    console.log('[renderMessage] msg', idx, 'role='+msg.role, 'html_len='+html.length);
-                    return html;
+                    results.push(html);
                 } catch (e) {
-                    console.error('[renderMessage] ERROR msg', idx, 'role='+msg.role, e);
-                    return `<div class="border border-red-200 rounded-lg px-4 py-2 text-xs text-red-500">
-                        [渲染失败 msg ${idx} role=${msg.role}]: ${escapeHtml(String(e))}
-                    </div>`;
+                    console.error('[renderMessage] ERROR at index', idx, 'role='+msg.role, e);
+                    results.push(`<div class="border border-red-300 rounded-lg px-4 py-3 bg-red-50">
+                        <div class="font-semibold text-red-700">渲染错误 [消息 ${idx}, role=${msg.role}]</div>
+                        <div class="text-xs text-red-600 mt-1">${escapeHtml(String(e.message || e))}</div>
+                        <details class="mt-2 text-xs">
+                            <summary class="cursor-pointer text-red-500">查看原始数据</summary>
+                            <pre class="mt-1 bg-white p-2 rounded overflow-x-auto">${escapeHtml(JSON.stringify(msg, null, 2))}</pre>
+                        </details>
+                    </div>`);
                 }
-            }).join('');
-            console.log('[renderConversation] Final HTML length:', conversationContent.innerHTML.length);
+            }
+            conversationContent.innerHTML = results.join('');
+            console.log('[renderConversation] Rendered', results.length, 'of', messages.length, 'messages');
 
             // Add accordion click handlers
             document.querySelectorAll('.accordion-trigger').forEach(trigger => {
