@@ -489,7 +489,9 @@
                     if (role === 'tool') {
                         html += `<div class="text-sm whitespace-pre-wrap text-gray-800 leading-relaxed">${escapeHtml(mainContent)}</div>`;
                     } else {
-                        html += `<div class="md-content text-sm text-gray-800 leading-relaxed">${marked.parse(mainContent)}</div>`;
+                        // Escape HTML first so raw tags in content don't break the DOM structure,
+                        // then let marked render only markdown syntax
+                        html += `<div class="md-content text-sm text-gray-800 leading-relaxed">${marked.parse(escapeHtml(mainContent))}</div>`;
                     }
                 }
 
