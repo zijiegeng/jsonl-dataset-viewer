@@ -402,9 +402,15 @@
 
         // Render conversation
         function renderConversation(messages) {
-            conversationContent.innerHTML = messages.map((msg, idx) =>
-                renderMessage(msg, idx)
-            ).join('');
+            conversationContent.innerHTML = messages.map((msg, idx) => {
+                try {
+                    return renderMessage(msg, idx);
+                } catch (e) {
+                    return `<div class="border border-red-200 rounded-lg px-4 py-2 text-xs text-red-500">
+                        [渲染失败 msg ${idx} role=${msg.role}]: ${escapeHtml(String(e))}
+                    </div>`;
+                }
+            }).join('');
 
             // Add accordion click handlers
             document.querySelectorAll('.accordion-trigger').forEach(trigger => {
@@ -495,11 +501,13 @@
 
                 if (tool_calls && tool_calls.length > 0) {
                     tool_calls.forEach(call => {
+                        const fn = call.function || {};
+                        const fnName = fn.name || call.name || call.id || '(unknown)';
                         let args;
-                        try { args = JSON.parse(call.function.arguments); } catch { args = call.function.arguments; }
+                        try { args = JSON.parse(fn.arguments ?? '{}'); } catch { args = fn.arguments ?? call; }
                         html += `
                             <div class="bg-blue-100 rounded p-3">
-                                <div class="font-semibold text-sm mb-1">Tool Call: ${escapeHtml(call.function.name)}</div>
+                                <div class="font-semibold text-sm mb-1">Tool Call: ${escapeHtml(fnName)}</div>
                                 <pre class="text-xs bg-white p-2 rounded overflow-x-auto">${
                                     typeof args === 'object' ? escapeHtml(JSON.stringify(args, null, 2)) : escapeHtml(String(args))
                                 }</pre>
