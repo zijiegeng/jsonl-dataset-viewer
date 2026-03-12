@@ -85,6 +85,15 @@
                     <div id="metadataContent" class="flex flex-wrap gap-4 text-sm"></div>
                 </div>
 
+                <!-- Messages source switcher (shown only when multiple sources exist) -->
+                <div id="messagesSwitcher" class="mb-4 hidden">
+                    <div class="flex items-center gap-2 bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-2 text-sm">
+                        <svg class="w-4 h-4 text-yellow-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                        <span class="text-yellow-800 font-medium">检测到多个 messages 字段：</span>
+                        <div id="switcherButtons" class="flex gap-2 flex-wrap"></div>
+                    </div>
+                </div>
+
                 <!-- Conversation -->
                 <div id="conversationSection" class="hidden">
                     <h2 class="text-xl font-semibold mb-4">Conversation</h2>
@@ -105,6 +114,8 @@
     <script>
         let totalCount = 0;
         let currentIndex = 0;
+        let currentSample = null;
+        let activeMessagesKey = null;
 
         // Icons (SVG)
         const icons = {
@@ -224,6 +235,7 @@
             error.classList.add('hidden');
             metadataSection.classList.add('hidden');
             conversationSection.classList.add('hidden');
+            document.getElementById('messagesSwitcher').classList.add('hidden');
 
             try {
                 const response = await fetch(`/api/sample?id=${index}`);
@@ -234,11 +246,16 @@
 
                 const sample = await response.json();
                 currentIndex = index;
+                currentSample = sample;
+                activeMessagesKey = sample._messages_sources ? sample._messages_sources[0].key : 'messages';
                 currentIndexEl.textContent = currentIndex + 1;
 
                 // Update navigation buttons
                 prevBtn.disabled = currentIndex === 0;
                 nextBtn.disabled = currentIndex >= totalCount - 1;
+
+                // Render switcher if multiple sources
+                renderSwitcher(sample._messages_sources);
 
                 // Render sample
                 renderMetadata(sample);
@@ -251,10 +268,43 @@
             }
         }
 
-        // Render metadata (inline, exclude 'prompt' field)
+        function renderSwitcher(sources) {
+            const switcher = document.getElementById('messagesSwitcher');
+            const buttons = document.getElementById('switcherButtons');
+            if (!sources || sources.length <= 1) {
+                switcher.classList.add('hidden');
+                return;
+            }
+
+            buttons.innerHTML = sources.map(s => `
+                <button
+                    onclick="switchMessages('${escapeHtml(s.key)}')"
+                    id="switcher-btn-${escapeHtml(s.key)}"
+                    class="px-3 py-1 rounded text-xs font-medium border transition-colors ${
+                        s.key === activeMessagesKey
+                            ? 'bg-yellow-600 text-white border-yellow-600'
+                            : 'bg-white text-yellow-800 border-yellow-400 hover:bg-yellow-100'
+                    }"
+                >${escapeHtml(s.key)}</button>
+            `).join('');
+
+            switcher.classList.remove('hidden');
+        }
+
+        function switchMessages(key) {
+            if (!currentSample || !currentSample._messages_sources) return;
+            const source = currentSample._messages_sources.find(s => s.key === key);
+            if (!source) return;
+            activeMessagesKey = key;
+            // Re-render switcher buttons to update active state
+            renderSwitcher(currentSample._messages_sources);
+            renderConversation(source.messages);
+        }
+
+        // Render metadata (inline, exclude 'prompt' field and internal fields)
         function renderMetadata(sample) {
             const fields = Object.entries(sample).filter(
-                ([key]) => key !== 'messages' && key !== 'prompt'
+                ([key]) => key !== 'messages' && key !== 'prompt' && !key.startsWith('_')
             );
 
             if (fields.length === 0) {

@@ -70,40 +70,35 @@ class DatasetManager:
         return len(self.offsets)
 
     def _normalize_sample(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Extract messages field and normalize sample structure."""
-        # Check top level
-        top_level_messages = data.get("messages")
+        """Extract messages field and normalize sample structure.
 
-        # Check second level
-        second_level_messages = []
-        second_level_keys = []
+        Returns the sample with:
+        - messages: the default (top-level preferred) messages array
+        - _messages_sources: list of {key, messages} for all found sources (only when >1)
+        """
+        # Collect all sources: top-level first, then nested
+        sources: List[Dict[str, Any]] = []
+
+        if "messages" in data:
+            sources.append({"key": "messages", "messages": data["messages"]})
+
         for key, value in data.items():
             if isinstance(value, dict) and "messages" in value:
-                second_level_messages.append(value["messages"])
-                second_level_keys.append(key)
+                sources.append({"key": f"{key}.messages", "messages": value["messages"]})
 
-        # Conflict detection
-        if top_level_messages is not None and second_level_messages:
-            raise ValueError(
-                f"Multiple messages fields detected: top-level and in {second_level_keys}"
-            )
-
-        if len(second_level_messages) > 1:
-            raise ValueError(
-                f"Multiple messages fields at second level: {second_level_keys}"
-            )
-
-        # Determine which messages to use
-        messages = top_level_messages
-        if messages is None and second_level_messages:
-            messages = second_level_messages[0]
-
-        if messages is None:
+        if not sources:
             raise ValueError("No messages field found in sample")
 
-        # Return normalized sample with messages at top level
         result = data.copy()
-        result["messages"] = messages
+        # Default: use the first source (top-level takes priority)
+        result["messages"] = sources[0]["messages"]
+
+        # Expose all sources so the frontend can offer a switcher
+        if len(sources) > 1:
+            result["_messages_sources"] = [
+                {"key": s["key"], "messages": s["messages"]} for s in sources
+            ]
+
         return result
 
 
