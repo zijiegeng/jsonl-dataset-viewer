@@ -396,15 +396,20 @@
 
         // Render conversation
         function renderConversation(messages) {
+            console.log('[renderConversation] Total messages:', messages.length);
             conversationContent.innerHTML = messages.map((msg, idx) => {
                 try {
-                    return renderMessage(msg, idx);
+                    const html = renderMessage(msg, idx);
+                    console.log('[renderMessage] msg', idx, 'role='+msg.role, 'html_len='+html.length);
+                    return html;
                 } catch (e) {
+                    console.error('[renderMessage] ERROR msg', idx, 'role='+msg.role, e);
                     return `<div class="border border-red-200 rounded-lg px-4 py-2 text-xs text-red-500">
                         [渲染失败 msg ${idx} role=${msg.role}]: ${escapeHtml(String(e))}
                     </div>`;
                 }
             }).join('');
+            console.log('[renderConversation] Final HTML length:', conversationContent.innerHTML.length);
 
             // Add accordion click handlers
             document.querySelectorAll('.accordion-trigger').forEach(trigger => {
