@@ -501,16 +501,10 @@
 
                 if (tool_calls && tool_calls.length > 0) {
                     tool_calls.forEach(call => {
-                        const fn = call.function || {};
-                        const fnName = fn.name || call.name || call.id || '(unknown)';
-                        let args;
-                        try { args = JSON.parse(fn.arguments ?? '{}'); } catch { args = fn.arguments ?? call; }
                         html += `
                             <div class="bg-blue-100 rounded p-3">
-                                <div class="font-semibold text-sm mb-1">Tool Call: ${escapeHtml(fnName)}</div>
-                                <pre class="text-xs bg-white p-2 rounded overflow-x-auto">${
-                                    typeof args === 'object' ? escapeHtml(JSON.stringify(args, null, 2)) : escapeHtml(String(args))
-                                }</pre>
+                                <div class="font-semibold text-sm mb-1">Tool Call</div>
+                                <pre class="text-xs bg-white p-2 rounded overflow-x-auto">${escapeHtml(JSON.stringify(call, null, 2))}</pre>
                             </div>`;
                     });
                 }
