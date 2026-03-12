@@ -5,7 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>JSONL Dataset Viewer</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
+        .md-content p { margin-bottom: 0.5em; }
+        .md-content p:last-child { margin-bottom: 0; }
+        .md-content h1,.md-content h2,.md-content h3 { font-weight: 600; margin: 0.75em 0 0.25em; }
+        .md-content h1 { font-size: 1.2em; }
+        .md-content h2 { font-size: 1.1em; }
+        .md-content h3 { font-size: 1em; }
+        .md-content ul,.md-content ol { padding-left: 1.5em; margin-bottom: 0.5em; }
+        .md-content li { margin-bottom: 0.2em; }
+        .md-content code { background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; font-size: 0.85em; }
+        .md-content pre { background: #f5f5f5; padding: 0.75rem; border-radius: 0.4rem; overflow-x: auto; margin-bottom: 0.5em; }
+        .md-content pre code { background: none; padding: 0; }
+        .md-content blockquote { border-left: 3px solid #d1d5db; padding-left: 0.75em; color: #6b7280; margin: 0.5em 0; }
         .accordion-content {
             max-height: 0;
             overflow: hidden;
@@ -92,6 +105,19 @@
                     <div id="conversationContent" class="space-y-3"></div>
                 </div>
 
+                <!-- Bottom Navigation -->
+                <div id="bottomNav" class="hidden mt-6 pt-4 border-t flex items-center justify-end gap-3">
+                    <button id="prevBtnBottom" class="h-9 px-3 py-2 border border-gray-300 bg-white rounded-md text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+                        ← Prev
+                    </button>
+                    <span class="text-sm font-medium text-gray-700">
+                        <span id="currentIndexBottom">1</span> / <span id="totalCountBottom">0</span>
+                    </span>
+                    <button id="nextBtnBottom" class="h-9 px-3 py-2 border border-gray-300 bg-white rounded-md text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+                        Next →
+                    </button>
+                </div>
+
                 <!-- Loading Indicator -->
                 <div id="loading" class="text-center py-8 text-gray-600 hidden">
                     Loading sample...
@@ -135,6 +161,11 @@
         const conversationContent = document.getElementById('conversationContent');
         const loading = document.getElementById('loading');
         const error = document.getElementById('error');
+        const bottomNav = document.getElementById('bottomNav');
+        const prevBtnBottom = document.getElementById('prevBtnBottom');
+        const nextBtnBottom = document.getElementById('nextBtnBottom');
+        const currentIndexBottomEl = document.getElementById('currentIndexBottom');
+        const totalCountBottomEl = document.getElementById('totalCountBottom');
 
         // Load dataset
         loadBtn.addEventListener('click', async () => {
@@ -210,6 +241,14 @@
             }
         });
 
+        // Bottom navigation buttons
+        prevBtnBottom.addEventListener('click', () => {
+            if (currentIndex > 0) fetchSample(currentIndex - 1);
+        });
+        nextBtnBottom.addEventListener('click', () => {
+            if (currentIndex < totalCount - 1) fetchSample(currentIndex + 1);
+        });
+
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
             if (e.target.tagName === 'INPUT') return;
@@ -245,6 +284,10 @@
                 // Update navigation buttons
                 prevBtn.disabled = currentIndex === 0;
                 nextBtn.disabled = currentIndex >= totalCount - 1;
+                prevBtnBottom.disabled = currentIndex === 0;
+                nextBtnBottom.disabled = currentIndex >= totalCount - 1;
+                currentIndexBottomEl.textContent = currentIndex + 1;
+                totalCountBottomEl.textContent = totalCount;
 
                 // Render switcher if multiple sources
                 renderSwitcher(sample._messages_sources);
@@ -376,13 +419,14 @@
             });
 
             conversationSection.classList.remove('hidden');
+            bottomNav.classList.remove('hidden');
         }
 
         // Render single message
         function renderMessage(message, index) {
-            const { role, tool_calls, tool_call_id, name } = message;
+            const { role, tool_calls, name } = message;
 
-            // Normalize content: may be string or array of content parts
+            // Normalize content: may be string, array of content parts, or null
             let rawContent = message.content;
             let content;
             if (Array.isArray(rawContent)) {
@@ -394,102 +438,89 @@
                 content = rawContent || '';
             }
 
-            // Determine styling and icon
-            let bgColor = 'bg-gray-50';
-            let roleLabel = role;
-            let icon = '';
+            // Styling per role
+            let bgColor = 'bg-gray-50', borderColor = 'border-gray-200', roleLabel = role, icon = '';
+            if (role === 'system')         { bgColor = 'bg-purple-50'; borderColor = 'border-purple-200'; roleLabel = 'System';    icon = icons.system; }
+            else if (role === 'user')      { bgColor = 'bg-blue-50';   borderColor = 'border-blue-200';   roleLabel = 'User';      icon = icons.user; }
+            else if (role === 'assistant') { bgColor = 'bg-green-50';  borderColor = 'border-green-200';  roleLabel = 'Assistant'; icon = icons.assistant; }
+            else if (role === 'tool')      { bgColor = 'bg-gray-100';  borderColor = 'border-gray-300';   roleLabel = `Tool Result${name ? ` (${name})` : ''}`; icon = icons.tool; }
 
-            if (role === 'system') {
-                bgColor = 'bg-purple-50';
-                roleLabel = 'System';
-                icon = icons.system;
-            } else if (role === 'user') {
-                bgColor = 'bg-blue-50';
-                roleLabel = 'User';
-                icon = icons.user;
-            } else if (role === 'assistant') {
-                bgColor = 'bg-green-50';
-                roleLabel = 'Assistant';
-                icon = icons.assistant;
-            } else if (role === 'tool') {
-                bgColor = 'bg-gray-100';
-                roleLabel = `Tool Result${name ? ` (${name})` : ''}`;
-                icon = icons.tool;
-            }
-
-            // Parse thinking tags
-            let mainContent = content || '';
+            // Extract <thinking> from assistant content
+            let mainContent = content;
             let thinkingContent = null;
-
             if (content && role === 'assistant') {
-                const thinkingMatch = content.match(/<thinking>([\s\S]*?)<\/thinking>/);
-                if (thinkingMatch) {
-                    thinkingContent = thinkingMatch[1].trim();
-                    mainContent = content.replace(/<thinking>[\s\S]*?<\/thinking>/, '').trim();
-                }
+                const m = content.match(/<thinking>([\s\S]*?)<\/thinking>/);
+                if (m) { thinkingContent = m[1].trim(); mainContent = content.replace(/<thinking>[\s\S]*?<\/thinking>/, '').trim(); }
             }
 
-            let html = `
-                <div class="${bgColor} rounded-lg p-4">
-                    <div class="flex items-center gap-2 mb-3">
+            const hasBody = mainContent || thinkingContent || (tool_calls && tool_calls.length > 0);
+            const msgId = `msg-body-${index}`;
+
+            let html = `<div class="border ${borderColor} rounded-lg overflow-hidden">`;
+
+            // Clickable header
+            html += `
+                <div class="${bgColor} px-4 py-2 flex items-center justify-between ${hasBody ? 'cursor-pointer hover:brightness-95 select-none' : ''}"
+                     ${hasBody ? `onclick="toggleMsg('${msgId}')"` : ''}>
+                    <div class="flex items-center gap-2">
                         <div class="text-gray-700">${icon}</div>
-                        <div class="font-semibold text-sm uppercase tracking-wide text-gray-700">
-                            ${escapeHtml(roleLabel)}
-                        </div>
+                        <div class="font-semibold text-sm uppercase tracking-wide text-gray-700">${escapeHtml(roleLabel)}</div>
                     </div>
-            `;
+                    ${hasBody ? `<span id="${msgId}-chevron" class="text-gray-400 text-xs" style="transition:transform 0.2s;display:inline-block">▲</span>` : ''}
+                </div>`;
 
-            // Thinking section (arrow on left)
-            if (thinkingContent) {
-                html += `
-                    <div class="mb-3">
-                        <div class="accordion-trigger bg-yellow-100 px-3 py-2 rounded hover:bg-yellow-200 cursor-pointer flex items-center gap-2">
-                            <span class="chevron text-xs" style="transition: transform 0.2s">▼</span>
-                            <span class="text-sm font-medium">Thinking</span>
-                        </div>
-                        <div class="accordion-content bg-yellow-50 px-3 rounded-b">
-                            <div class="text-sm whitespace-pre-wrap py-2">${escapeHtml(thinkingContent)}</div>
-                        </div>
-                    </div>
-                `;
-            }
+            if (hasBody) {
+                html += `<div id="${msgId}" class="px-4 py-3 space-y-3">`;
 
-            // Main content
-            if (mainContent) {
-                html += `
-                    <div class="text-sm whitespace-pre-wrap text-gray-800 leading-relaxed">${escapeHtml(mainContent)}</div>
-                `;
-            }
-
-            // Tool calls
-            if (tool_calls && tool_calls.length > 0) {
-                html += '<div class="mt-3 space-y-2">';
-                tool_calls.forEach(call => {
-                    let args;
-                    try {
-                        args = JSON.parse(call.function.arguments);
-                    } catch {
-                        args = call.function.arguments;
-                    }
-
+                if (thinkingContent) {
                     html += `
-                        <div class="bg-blue-100 rounded p-3">
-                            <div class="font-semibold text-sm mb-1">
-                                Tool Call: ${escapeHtml(call.function.name)}
+                        <div>
+                            <div class="accordion-trigger bg-yellow-100 px-3 py-2 rounded hover:bg-yellow-200 cursor-pointer flex items-center gap-2">
+                                <span class="chevron text-xs" style="transition:transform 0.2s">▼</span>
+                                <span class="text-sm font-medium">Thinking</span>
                             </div>
-                            <pre class="text-xs bg-white p-2 rounded overflow-x-auto">${
-                                typeof args === 'object'
-                                    ? escapeHtml(JSON.stringify(args, null, 2))
-                                    : escapeHtml(args)
-                            }</pre>
-                        </div>
-                    `;
-                });
-                html += '</div>';
+                            <div class="accordion-content bg-yellow-50 px-3 rounded-b">
+                                <div class="text-sm whitespace-pre-wrap py-2">${escapeHtml(thinkingContent)}</div>
+                            </div>
+                        </div>`;
+                }
+
+                if (mainContent) {
+                    if (role === 'tool') {
+                        html += `<div class="text-sm whitespace-pre-wrap text-gray-800 leading-relaxed">${escapeHtml(mainContent)}</div>`;
+                    } else {
+                        html += `<div class="md-content text-sm text-gray-800 leading-relaxed">${marked.parse(mainContent)}</div>`;
+                    }
+                }
+
+                if (tool_calls && tool_calls.length > 0) {
+                    tool_calls.forEach(call => {
+                        let args;
+                        try { args = JSON.parse(call.function.arguments); } catch { args = call.function.arguments; }
+                        html += `
+                            <div class="bg-blue-100 rounded p-3">
+                                <div class="font-semibold text-sm mb-1">Tool Call: ${escapeHtml(call.function.name)}</div>
+                                <pre class="text-xs bg-white p-2 rounded overflow-x-auto">${
+                                    typeof args === 'object' ? escapeHtml(JSON.stringify(args, null, 2)) : escapeHtml(String(args))
+                                }</pre>
+                            </div>`;
+                    });
+                }
+
+                html += `</div>`;
             }
 
-            html += '</div>';
+            html += `</div>`;
             return html;
+        }
+
+        function toggleMsg(id) {
+            const body = document.getElementById(id);
+            const chevron = document.getElementById(id + '-chevron');
+            if (!body) return;
+            const collapsed = body.style.display === 'none';
+            body.style.display = collapsed ? '' : 'none';
+            if (chevron) chevron.style.transform = collapsed ? '' : 'rotate(180deg)';
         }
 
         // Utility functions
