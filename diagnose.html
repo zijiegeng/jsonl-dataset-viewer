@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Messages Rendering Diagnostic</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        body { font-family: monospace; padding: 20px; }
+        .test { margin: 20px 0; padding: 10px; border: 1px solid #ccc; }
+        .pass { background: #d4edda; }
+        .fail { background: #f8d7da; }
+        .warn { background: #fff3cd; }
+    </style>
+</head>
+<body>
+    <h1>Messages Rendering Diagnostic Tool</h1>
+    <div id="results"></div>
+
+    <script>
+        const results = [];
+
+        function test(name, fn) {
+            try {
+                const result = fn();
+                results.push({ name, status: result ? 'pass' : 'fail', message: result || 'Failed' });
+            } catch (e) {
+                results.push({ name, status: 'fail', message: e.message });
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Test 1: Basic escapeHtml
+        test('escapeHtml handles special chars', () => {
+            const input = '<div>test</div> & "quotes"';
+            const output = escapeHtml(input);
+            return output.includes('&lt;') && output.includes('&gt;') && output.includes('&quot;');
+        });
+
+        // Test 2: escapeHtml with null/undefined
+        test('escapeHtml handles null/undefined', () => {
+            const n = escapeHtml(null);
+            const u = escapeHtml(undefined);
+            return n === 'null' && u === 'undefined';
+        });
+
+        // Test 3: marked.parse with escaped HTML
+        test('marked.parse after escapeHtml', () => {
+            const input = 'Text with </div> tag and `code`';
+            const escaped = escapeHtml(input);
+            const output = marked.parse(escaped);
+            return !output.includes('</div>') && output.includes('&lt;/div&gt;');
+        });
+
+        // Test 4: marked.parse with long content
+        test('marked.parse handles long content', () => {
+            const longText = 'a'.repeat(10000) + '\n\n' + 'b'.repeat(10000);
+            const output = marked.parse(escapeHtml(longText));
+            return output.length > 20000;
+        });
+
+        // Test 5: JSON.stringify with complex tool_calls
+        test('JSON.stringify handles nested escapes', () => {
+            const call = {
+                function: {
+                    name: 'exec',
+                    arguments: '{"command":"search \\"apple\\""}'
+                }
+            };
+            const json = JSON.stringify(call, null, 2);
+            return json.length > 0 && json.includes('search');
+        });
+
+        // Test 6: Array content normalization
+        test('Array content normalization', () => {
+            const content = [
+                { type: 'text', text: 'Hello' },
+                { type: 'image', url: 'test.jpg' },
+                { type: 'text', text: 'World' }
+            ];
+            const normalized = content
+                .filter(p => p && p.type === 'text')
+                .map(p => p.text)
+                .join('\n');
+            return normalized === 'Hello\nWorld';
+        });
+
+        // Test 7: hasBody logic
+        test('hasBody logic with tool_calls only', () => {
+            const mainContent = '';
+            const thinkingContent = null;
+            const tool_calls = [{ id: 'test' }];
+            const hasBody = mainContent || thinkingContent || (tool_calls && tool_calls.length > 0);
+            return hasBody === true;
+        });
+
+        // Test 8: HTML structure balance
+        test('HTML structure balance', () => {
+            let html = '<div class="border">';
+            html += '<div class="header">Test</div>';
+            html += '<div id="body">';
+            html += '<div>Content</div>';
+            html += '</div>';
+            html += '</div>';
+            const opens = (html.match(/<div/g) || []).length;
+            const closes = (html.match(/<\/div>/g) || []).length;
+            return opens === closes;
+        });
+
+        // Test 9: Template string with special chars
+        test('Template string injection safety', () => {
+            const msgId = "msg-body-0";
+            const html = `<div onclick="toggleMsg('${msgId}')">Test</div>`;
+            return html.includes("onclick=\"toggleMsg('msg-body-0')\"");
+        });
+
+        // Test 10: Large innerHTML assignment
+        test('Large innerHTML assignment', () => {
+            const div = document.createElement('div');
+            const largeHtml = '<div>test</div>'.repeat(1000);
+            div.innerHTML = largeHtml;
+            return div.children.length === 1000;
+        });
+
+        // Test 11: Circular reference in JSON.stringify
+        test('JSON.stringify with circular reference', () => {
+            const obj = { a: 1 };
+            obj.self = obj;
+            try {
+                JSON.stringify(obj);
+                return false; // Should throw
+            } catch (e) {
+                return e.message.includes('circular');
+            }
+        });
+
+        // Test 12: marked.parse with Chinese characters
+        test('marked.parse with Chinese + markdown', () => {
+            const input = '我注意到 `https://github.com/test` 这个链接';
+            const output = marked.parse(escapeHtml(input));
+            return output.includes('我注意到') && output.includes('&lt;code&gt;');
+        });
+
+        // Display results
+        const container = document.getElementById('results');
+        results.forEach(r => {
+            const div = document.createElement('div');
+            div.className = `test ${r.status}`;
+            div.innerHTML = `
+                <strong>${r.status.toUpperCase()}</strong>: ${r.name}<br>
+                <small>${r.message}</small>
+            `;
+            container.appendChild(div);
+        });
+
+        const summary = document.createElement('div');
+        const passed = results.filter(r => r.status === 'pass').length;
+        const failed = results.filter(r => r.status === 'fail').length;
+        summary.innerHTML = `<h2>Summary: ${passed} passed, ${failed} failed</h2>`;
+        container.insertBefore(summary, container.firstChild);
+    </script>
+</body>
+</html>
