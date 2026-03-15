@@ -5,6 +5,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './
 interface Message {
   role: string
   content?: string
+  thinking?: string | object
   tool_calls?: Array<{
     id: string
     type: string
@@ -44,15 +45,28 @@ export function Conversation({ messages }: ConversationProps) {
       roleLabel = `Tool Result${message.name ? ` (${message.name})` : ''}`
     }
 
-    // Parse thinking tags if present
+    // Parse thinking content from assistant messages
     let mainContent = content || ''
     let thinkingContent: string | null = null
 
-    if (content && role === 'assistant') {
-      const thinkingMatch = content.match(/<thinking>([\s\S]*?)<\/thinking>/)
-      if (thinkingMatch) {
-        thinkingContent = thinkingMatch[1].trim()
-        mainContent = content.replace(/<thinking>[\s\S]*?<\/thinking>/, '').trim()
+    if (role === 'assistant') {
+      // Priority 1: explicit "thinking" field in message object
+      if (message.thinking) {
+        thinkingContent = typeof message.thinking === 'string'
+          ? message.thinking
+          : JSON.stringify(message.thinking, null, 2)
+      }
+      // Priority 2: extract from <thinking> or <think> tags in content
+      else if (content) {
+        const thinkingMatch = content.match(/<thinking>([\s\S]*?)<\/thinking>/)
+        const thinkMatch = content.match(/<think>([\s\S]*?)<\/think>/)
+        if (thinkingMatch) {
+          thinkingContent = thinkingMatch[1].trim()
+          mainContent = content.replace(/<thinking>[\s\S]*?<\/thinking>/, '').trim()
+        } else if (thinkMatch) {
+          thinkingContent = thinkMatch[1].trim()
+          mainContent = content.replace(/<think>[\s\S]*?<\/think>/, '').trim()
+        }
       }
     }
 

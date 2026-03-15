@@ -39,6 +39,18 @@
                     placeholder="Enter JSONL file path..."
                     class="flex-1 h-10 rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+                <input
+                    type="file"
+                    id="fileInput"
+                    accept=".jsonl,.json"
+                    class="hidden"
+                />
+                <button
+                    id="chooseFileBtn"
+                    class="h-10 px-4 py-2 bg-gray-600 text-white rounded-md text-sm font-medium hover:bg-gray-700"
+                >
+                    Choose File
+                </button>
                 <button
                     id="loadBtn"
                     class="h-10 px-4 py-2 bg-gray-900 text-white rounded-md text-sm font-medium hover:bg-gray-800"
@@ -128,6 +140,7 @@
         let currentIndex = 0;
         let currentSample = null;
         let activeMessagesKey = null;
+        let selectedFile = null;
 
         // Icons (SVG)
         const icons = {
@@ -140,6 +153,8 @@
         // Elements
         const datasetPath = document.getElementById('datasetPath');
         const loadBtn = document.getElementById('loadBtn');
+        const chooseFileBtn = document.getElementById('chooseFileBtn');
+        const fileInput = document.getElementById('fileInput');
         const loadError = document.getElementById('loadError');
         const mainCard = document.getElementById('mainCard');
         const prevBtn = document.getElementById('prevBtn');
@@ -161,11 +176,25 @@
         const currentIndexBottomEl = document.getElementById('currentIndexBottom');
         const totalCountBottomEl = document.getElementById('totalCountBottom');
 
+        // Choose file button
+        chooseFileBtn.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        // File input change handler
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                selectedFile = file;
+                datasetPath.value = file.name;
+            }
+        });
+
         // Load dataset
         loadBtn.addEventListener('click', async () => {
-            const path = datasetPath.value.trim();
-            if (!path) {
-                showLoadError('Please enter a file path');
+            // Check if we have a selected file or a path
+            if (!selectedFile && !datasetPath.value.trim()) {
+                showLoadError('Please enter a file path or choose a file');
                 return;
             }
 
@@ -174,11 +203,26 @@
             hideLoadError();
 
             try {
-                const response = await fetch('/api/load_dataset', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ path })
-                });
+                let response;
+
+                if (selectedFile) {
+                    // Upload file
+                    const formData = new FormData();
+                    formData.append('file', selectedFile);
+
+                    response = await fetch('/api/upload_dataset', {
+                        method: 'POST',
+                        body: formData
+                    });
+                } else {
+                    // Load from path
+                    const path = datasetPath.value.trim();
+                    response = await fetch('/api/load_dataset', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ path })
+                    });
+                }
 
                 if (!response.ok) {
                     const data = await response.json();
@@ -194,6 +238,10 @@
                 if (totalCount > 0) {
                     await fetchSample(0);
                 }
+
+                // Clear selected file after successful load
+                selectedFile = null;
+                fileInput.value = '';
             } catch (err) {
                 showLoadError(err.message);
             } finally {
@@ -456,12 +504,26 @@
             else if (role === 'assistant') { bgColor = 'bg-green-50';  borderColor = 'border-green-200';  roleLabel = 'Assistant'; icon = icons.assistant; }
             else if (role === 'tool')      { bgColor = 'bg-gray-100';  borderColor = 'border-gray-300';   roleLabel = `Tool Result${name ? ` (${name})` : ''}`; icon = icons.tool; }
 
-            // Extract <thinking> from assistant content
+            // Extract thinking content from assistant messages
             let mainContent = content;
             let thinkingContent = null;
-            if (content && role === 'assistant') {
-                const m = content.match(/<thinking>([\s\S]*?)<\/thinking>/);
-                if (m) { thinkingContent = m[1].trim(); mainContent = content.replace(/<thinking>[\s\S]*?<\/thinking>/, '').trim(); }
+            if (role === 'assistant') {
+                // Priority 1: explicit "thinking" field in message object
+                if (message.thinking) {
+                    thinkingContent = typeof message.thinking === 'string' ? message.thinking : JSON.stringify(message.thinking, null, 2);
+                }
+                // Priority 2: extract from <thinking> or <think> tags in content
+                else if (content) {
+                    const thinkingMatch = content.match(/<thinking>([\s\S]*?)<\/thinking>/);
+                    const thinkMatch = content.match(/<think>([\s\S]*?)<\/think>/);
+                    if (thinkingMatch) {
+                        thinkingContent = thinkingMatch[1].trim();
+                        mainContent = content.replace(/<thinking>[\s\S]*?<\/thinking>/, '').trim();
+                    } else if (thinkMatch) {
+                        thinkingContent = thinkMatch[1].trim();
+                        mainContent = content.replace(/<think>[\s\S]*?<\/think>/, '').trim();
+                    }
+                }
             }
 
             const hasBody = mainContent || thinkingContent || (tool_calls && tool_calls.length > 0);

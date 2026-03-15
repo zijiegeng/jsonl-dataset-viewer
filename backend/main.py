@@ -1,7 +1,8 @@
 import json
+import tempfile
 from pathlib import Path
 from typing import Optional, Dict, Any, List
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -16,6 +17,7 @@ class DatasetManager:
     def __init__(self):
         self.file_path: Optional[Path] = None
         self.offsets: List[int] = []
+        self.temp_file: Optional[Path] = None
 
     def load_dataset(self, path: str) -> int:
         """Build line offset index and return total count."""
@@ -126,6 +128,31 @@ async def load_dataset(request: LoadDatasetRequest):
         return {"success": True, "count": count}
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/upload_dataset")
+async def upload_dataset(file: UploadFile = File(...)):
+    """Upload a dataset file and load it."""
+    try:
+        # Clean up previous temp file if exists
+        if dataset_manager.temp_file and dataset_manager.temp_file.exists():
+            dataset_manager.temp_file.unlink()
+
+        # Create a temporary file
+        suffix = Path(file.filename).suffix if file.filename else '.jsonl'
+        temp_file = Path(tempfile.mktemp(suffix=suffix))
+
+        # Write uploaded content to temp file
+        content = await file.read()
+        temp_file.write_bytes(content)
+
+        # Load the dataset from temp file
+        count = dataset_manager.load_dataset(str(temp_file))
+        dataset_manager.temp_file = temp_file
+
+        return {"success": True, "count": count, "filename": file.filename}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

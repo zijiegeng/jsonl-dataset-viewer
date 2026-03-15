@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
@@ -11,10 +11,20 @@ export function DatasetLoader({ onLoad }: DatasetLoaderProps) {
   const [path, setPath] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setSelectedFile(file)
+      setPath(file.name)
+    }
+  }
 
   const handleLoad = async () => {
-    if (!path.trim()) {
-      setError('Please enter a file path')
+    if (!selectedFile && !path.trim()) {
+      setError('Please enter a file path or choose a file')
       return
     }
 
@@ -22,13 +32,27 @@ export function DatasetLoader({ onLoad }: DatasetLoaderProps) {
     setError(null)
 
     try {
-      const response = await fetch('/api/load_dataset', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ path }),
-      })
+      let response
+
+      if (selectedFile) {
+        // Upload file
+        const formData = new FormData()
+        formData.append('file', selectedFile)
+
+        response = await fetch('/api/upload_dataset', {
+          method: 'POST',
+          body: formData,
+        })
+      } else {
+        // Load from path
+        response = await fetch('/api/load_dataset', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ path }),
+        })
+      }
 
       if (!response.ok) {
         const data = await response.json()
@@ -37,6 +61,12 @@ export function DatasetLoader({ onLoad }: DatasetLoaderProps) {
 
       const data = await response.json()
       onLoad(data.count)
+
+      // Clear selected file after successful load
+      setSelectedFile(null)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load dataset')
     } finally {
@@ -59,6 +89,20 @@ export function DatasetLoader({ onLoad }: DatasetLoaderProps) {
             onKeyDown={(e) => e.key === 'Enter' && handleLoad()}
             disabled={loading}
           />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".jsonl,.json"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+          <Button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={loading}
+            variant="outline"
+          >
+            Choose File
+          </Button>
           <Button onClick={handleLoad} disabled={loading}>
             {loading ? 'Loading...' : 'Load'}
           </Button>
