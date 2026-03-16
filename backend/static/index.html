@@ -136,6 +136,12 @@
     </div>
 
     <script>
+        // Configure marked to sanitize HTML
+        marked.setOptions({
+            breaks: true,  // Convert \n to <br>
+            gfm: true,     // GitHub Flavored Markdown
+        });
+
         let totalCount = 0;
         let currentIndex = 0;
         let currentSample = null;
@@ -562,9 +568,8 @@
                     if (role === 'tool') {
                         html += `<div class="text-sm whitespace-pre-wrap text-gray-800 leading-relaxed">${escapeHtml(mainContent)}</div>`;
                     } else {
-                        // Escape HTML first so raw tags in content don't break the DOM structure,
-                        // then let marked render only markdown syntax
-                        html += `<div class="md-content text-sm text-gray-800 leading-relaxed">${marked.parse(escapeHtml(mainContent))}</div>`;
+                        // Use marked to parse markdown (marked handles HTML escaping internally)
+                        html += `<div class="md-content text-sm text-gray-800 leading-relaxed">${marked.parse(mainContent)}</div>`;
                     }
                 }
 

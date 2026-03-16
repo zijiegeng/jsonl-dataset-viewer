@@ -95,7 +95,14 @@ export function Conversation({ messages }: ConversationProps) {
         {/* Main content */}
         {mainContent && (
           <div className="prose prose-sm max-w-none">
-            <ReactMarkdown>{mainContent}</ReactMarkdown>
+            <ReactMarkdown
+              components={{
+                // Ensure line breaks are preserved
+                p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+              }}
+            >
+              {mainContent}
+            </ReactMarkdown>
           </div>
         )}
 
